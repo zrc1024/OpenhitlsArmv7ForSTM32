@@ -59,11 +59,18 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
+        openhitls/platform/Secure_C/include
         openhitls/include/auth
         openhitls/include/bsl
         openhitls/include/crypto
         openhitls/include/pki
         openhitls/include/tls
+
+        openhitls/crypto/bn/include
+        openhitls/crypto/ecc/include
+        openhitls/crypto/encode/include
+        openhitls/config/macro_config
+
 )
 
 # Add project symbols (macros)
@@ -79,8 +86,4 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
         hitls_bsl-static
         boundscheck
 )
-
-
-#add_subdirectory(openhitls/testcode/demo)
-
 

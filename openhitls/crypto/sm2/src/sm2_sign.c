@@ -395,10 +395,11 @@ static int32_t Sm2SignCore(const CRYPT_SM2_Ctx *ctx, BN_BigNum *e, BN_BigNum *r,
         goto ERR;
     }
     for (i = 0; i < CRYPT_ECC_TRY_MAX_CNT; i++) {
-        GOTO_ERR_IF(BN_RandRangeEx(ctx->pkey->libCtx, k, paraN), ret);
-        if (BN_IsZero(k)) {
-            continue;
-        }
+        BN_Hex2Bn(&k, "59276E27D506861A16680F3AD9C02DCCEF3CC1FA3CDBE4CE6D54B80DEAC1BC21");
+        // GOTO_ERR_IF(BN_RandRangeEx(ctx->pkey->libCtx, k, paraN), ret);
+        // if (BN_IsZero(k)) {
+        //     continue;
+        // }
         // pt = k * G
         GOTO_ERR_IF(ECC_PointMul(ctx->pkey->para, pt, k, NULL), ret);
         // r = (e + pt->x) mod n

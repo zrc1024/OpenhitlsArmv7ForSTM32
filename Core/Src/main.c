@@ -94,8 +94,7 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  printf("Start testing each module for correctness...\r\n");
-  test();
+  test_openhitls();
   /* USER CODE END 2 */
 
   /* Infinite loop */

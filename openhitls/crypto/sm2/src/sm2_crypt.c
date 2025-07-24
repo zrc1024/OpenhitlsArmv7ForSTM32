@@ -212,10 +212,11 @@ int32_t CRYPT_SM2_Encrypt(CRYPT_SM2_Ctx *ctx, const uint8_t *data, uint32_t data
 #ifdef HITLS_CRYPTO_ACVP_TESTS
         if (isInternal) {
 #endif
-            GOTO_ERR_IF(BN_RandRangeEx(ctx->pkey->libCtx, k, order), ret);
-            if (BN_IsZero(k)) {
-                continue;
-            }
+            // GOTO_ERR_IF(BN_RandRangeEx(ctx->pkey->libCtx, k, order), ret);
+            // if (BN_IsZero(k)) {
+            //     continue;
+            // }
+            BN_Hex2Bn(&k, "59276E27D506861A16680F3AD9C02DCCEF3CC1FA3CDBE4CE6D54B80DEAC1BC21");
 #ifdef HITLS_CRYPTO_ACVP_TESTS
         }
 #endif

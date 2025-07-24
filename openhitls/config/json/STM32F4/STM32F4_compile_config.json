@@ -9,9 +9,26 @@
         "CC_MD_DEPENDENT_FLAGS": {
             "CC_FLAGS_ADD": [
                 "-mcpu=cortex-m4",
-                "-mthumb",
+                "-mfpu=fpv4-sp-d16",
                 "-mfloat-abi=hard",
-                "-mfpu=fpv4-sp-d16"
+                "-Wall",
+                "-Wextra",
+                "-Wpedantic",
+                "-fdata-sections",
+                "-ffunction-sections",
+                "-O0",
+                "-g3"
+            ],
+            "CXX_FLAGS_ADD": [
+                "-fno-rtti",
+                "-fno-exceptions",
+                "-fno-threadsafe-statics"
+            ],
+            "ASM_FLAGS_ADD": [
+                "-x",
+                "assembler-with-cpp",
+                "-MMD",
+                "-MP"
             ]
         },
         "CC_DEFINE_FLAGS": {
@@ -22,7 +39,12 @@
     },
     "linkFlag": {
         "PUBLIC": [
-            "-static"
+            "-static",
+            "--specs=nano.specs",
+            "-Wl,--gc-sections",
+            "-Wl,--start-group -lc -lm",
+            "-Wl,--end-group",
+            "-Wl,--print-memory-usage"
         ],
         "SHARED": [],
         "EXE": []

@@ -4,81 +4,201 @@
 #include <string.h>
 #include <stdlib.h>
 #include "bsl_err.h"
+#include "bsl_sal.h"
+#include "crypt_errno.h"
 #include "crypt_eal_md.h"
 #include "crypt_eal_pkey.h"
-#include "bsl_sal.h"
 #include "crypt_eal_init.h"
-#include "crypt_errno.h"
 #include "crypt_eal_rand.h"
 
-void PrintLastError(void) {
-    const char *file = NULL;
-    uint32_t line = 0;
-    BSL_ERR_GetLastErrorFileLine(&file, &line); // 获取错误发生的文件名和行数
-    printf("failed at file %s at line %d\n", file, (int)line);
+void test_sm3(void) {
+    uint8_t in1[] = {0x61, 0x62, 0x63};
+    uint8_t in2[] = {
+        0x61, 0x62, 0x63, 0x64, 0x61, 0x62, 0x63, 0x64, 0x61, 0x62, 0x63, 0x64, 0x61, 0x62, 0x63, 0x64,
+        0x61, 0x62, 0x63, 0x64, 0x61, 0x62, 0x63, 0x64, 0x61, 0x62, 0x63, 0x64, 0x61, 0x62, 0x63, 0x64,
+        0x61, 0x62, 0x63, 0x64, 0x61, 0x62, 0x63, 0x64, 0x61, 0x62, 0x63, 0x64, 0x61, 0x62, 0x63, 0x64,
+        0x61, 0x62, 0x63, 0x64, 0x61, 0x62, 0x63, 0x64, 0x61, 0x62, 0x63, 0x64, 0x61, 0x62, 0x63, 0x64};
+    uint8_t out1[] = {
+        0x66, 0xC7, 0xF0, 0xF4, 0x62, 0xEE, 0xED, 0xD9, 0xD1, 0xF2, 0xD4, 0x6B, 0xDC, 0x10, 0xE4, 0xE2,
+        0x41, 0x67, 0xC4, 0x87, 0x5C, 0xF2, 0xF7, 0xA2, 0x29, 0x7D, 0xA0, 0x2B, 0x8F, 0x4B, 0xA8, 0xE0};
+    uint8_t out2[] = {
+        0xde, 0xbe, 0x9f, 0xf9, 0x22, 0x75, 0xb8, 0xa1, 0x38, 0x60, 0x48, 0x89, 0xc1, 0x8e, 0x5a, 0x4d,
+        0x6f, 0xdb, 0x70, 0xe5, 0x38, 0x7e, 0x57, 0x65, 0x29, 0x3d, 0xcb, 0xa3, 0x9c, 0x0c, 0x57, 0x32};
+
+    uint8_t out[32]; // SM3 digest length is 32
+    uint32_t outLen = sizeof(out);
+    CRYPT_EAL_MdCTX *ctx = NULL;
+
+    ctx = CRYPT_EAL_MdNewCtx(CRYPT_MD_SM3);
+    ASSERT_TRUE(ctx != NULL);
+    ASSERT_EQ(CRYPT_EAL_MdInit(ctx), CRYPT_SUCCESS);
+    ASSERT_EQ(CRYPT_EAL_MdUpdate(ctx, in1, sizeof(in1)), CRYPT_SUCCESS);
+    ASSERT_EQ(CRYPT_EAL_MdFinal(ctx, out, &outLen), CRYPT_SUCCESS);
+    ASSERT_EQ(outLen, 32);
+    ASSERT_EQ(memcmp(out, out1, sizeof(out1)), 0);
+    ASSERT_EQ(CRYPT_EAL_Md(CRYPT_MD_SM3, in1, sizeof(in1), out, &outLen), CRYPT_SUCCESS);
+    ASSERT_EQ(memcmp(out, out1, sizeof(out1)), 0);
+
+
+    CRYPT_EAL_MdFreeCtx(ctx);
+    ctx = CRYPT_EAL_MdNewCtx(CRYPT_MD_SM3);
+    ASSERT_TRUE(ctx != NULL);
+    ASSERT_EQ(CRYPT_EAL_MdInit(ctx), CRYPT_SUCCESS);
+    ASSERT_EQ(CRYPT_EAL_MdUpdate(ctx, in2, sizeof(in2)), CRYPT_SUCCESS);
+    ASSERT_EQ(CRYPT_EAL_MdFinal(ctx, out, &outLen), CRYPT_SUCCESS);
+    ASSERT_EQ(outLen, 32);
+    ASSERT_EQ(memcmp(out, out2, sizeof(out2)), 0);
+    ASSERT_EQ(CRYPT_EAL_Md(CRYPT_MD_SM3, in2, sizeof(in2), out, &outLen), CRYPT_SUCCESS);
+    ASSERT_EQ(memcmp(out, out2, sizeof(out2)), 0);
+EXIT:
+    CRYPT_EAL_MdFreeCtx(ctx);
+
 }
 
-void test(void) {
+void test_sm2_sign_and_verify(void) {
+    uint8_t prvkey[32] = {
+        0x39, 0x45, 0x20, 0x8F, 0x7B, 0x21, 0x44, 0xB1, 0x3F, 0x36, 0xE3, 0x8A, 0xC6, 0xD3, 0x9F, 0x95,
+        0x88, 0x93, 0x93, 0x69, 0x28, 0x60, 0xB5, 0x1A, 0x42, 0xFB, 0x81, 0xEF, 0x4D, 0xF7, 0xC5, 0xB8};
+    uint8_t pubkey[65] = {
+        0x04, 0x09, 0xf9, 0xdf, 0x31, 0x1e, 0x54, 0x21, 0xa1, 0x50, 0xdd, 0x7d, 0x16, 0x1e, 0x4b, 0xc5,
+        0xc6, 0x72, 0x17, 0x9f, 0xad, 0x18, 0x33, 0xfc, 0x07, 0x6b, 0xb0, 0x8f, 0xf3, 0x56, 0xf3, 0x50,
+        0x20, 0xcc, 0xea, 0x49, 0x0c, 0xe2, 0x67, 0x75, 0xa5, 0x2d, 0xc6, 0xea, 0x71, 0x8c, 0xc1, 0xaa,
+        0x60, 0x0a, 0xed, 0x05, 0xfb, 0xf3, 0x5e, 0x08, 0x4a, 0x66, 0x32, 0xf6, 0x07, 0x2d, 0xa9, 0xad,
+        0x13,
+    };
+    uint8_t userId[16] = {
+        0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38};
+    const uint8_t msg[14] = {
+        0x6D, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x20, 0x64, 0x69, 0x67, 0x65, 0x73, 0x74};
+    const uint8_t sign[72] = {
+        0x30, 0x46, 0x02, 0x21, 0x00, 0xf5, 0xa0, 0x3b, 0x06, 0x48, 0xd2, 0xc4, 0x63, 0x0e, 0xea, 0xc5,
+        0x13, 0xe1, 0xbb, 0x81, 0xa1, 0x59, 0x44, 0xda, 0x38, 0x27, 0xd5, 0xb7, 0x41, 0x43, 0xac, 0x7e,
+        0xac, 0xee, 0xe7, 0x20, 0xb3, 0x02, 0x21, 0x00, 0xb1, 0xb6, 0xaa, 0x29, 0xdf, 0x21, 0x2f, 0xd8,
+        0x76, 0x31, 0x82, 0xbc, 0x0d, 0x42, 0x1c, 0xa1, 0xbb, 0x90, 0x38, 0xfd, 0x1f, 0x7f, 0x42, 0xd4,
+        0x84, 0x0b, 0x69, 0xc4, 0x85, 0xbb, 0xc1, 0xaa
+        };
+    CRYPT_EAL_PkeyPrv prv = {
+        .id = CRYPT_PKEY_SM2,
+        .key.eccPrv.data = prvkey,
+        .key.eccPrv.len = sizeof(prvkey),
+    };
+    CRYPT_EAL_PkeyPub pub = {
+        .id = CRYPT_PKEY_SM2,
+        .key.eccPub.data = pubkey,
+        .key.eccPub.len = sizeof(pubkey),
+    };
 
+    int ret;
+    uint8_t signBuf[100];
+    uint32_t signLen = sizeof(signBuf);
+    CRYPT_EAL_PkeyCtx *dupCtx = NULL;
+
+    CRYPT_EAL_PkeyCtx *ctx = CRYPT_EAL_PkeyNewCtx(CRYPT_PKEY_SM2);
+    ASSERT_TRUE(ctx != NULL);
+    ASSERT_TRUE(CRYPT_EAL_PkeyCtrl(ctx, CRYPT_CTRL_SET_SM2_USER_ID, userId, sizeof(userId)) == CRYPT_SUCCESS);
+    ASSERT_TRUE(CRYPT_EAL_PkeySetPrv(ctx, &prv) == CRYPT_SUCCESS);
+    ASSERT_TRUE(CRYPT_EAL_PkeySign(ctx, CRYPT_MD_SM3, msg, sizeof(msg), signBuf, &signLen) == CRYPT_SUCCESS);
+    ASSERT_TRUE(signLen == sizeof(sign));
+    ASSERT_TRUE(memcmp(signBuf, sign, sizeof(sign)) == 0);
+    dupCtx = CRYPT_EAL_PkeyDupCtx(ctx);
+    ASSERT_TRUE(dupCtx != NULL);
+    signLen = sizeof(signBuf);
+    ASSERT_EQ(CRYPT_EAL_PkeySign(dupCtx, CRYPT_MD_SM3, msg, sizeof(msg), signBuf, &signLen), CRYPT_SUCCESS);
+    ASSERT_EQ(signLen, sizeof(sign));
+    ASSERT_TRUE(memcmp(signBuf, sign, sizeof(sign)) == 0);
+    printf("sm2 sign success\r\n");
+    CRYPT_EAL_PkeyFreeCtx(ctx);
+    CRYPT_EAL_PkeyFreeCtx(dupCtx);
+
+
+    ctx = CRYPT_EAL_PkeyNewCtx(CRYPT_PKEY_SM2);
+    ASSERT_TRUE(ctx != NULL);
+    ASSERT_TRUE(CRYPT_EAL_PkeyCtrl(ctx, CRYPT_CTRL_SET_SM2_USER_ID, userId, sizeof(userId)) == CRYPT_SUCCESS);
+    ASSERT_TRUE(CRYPT_EAL_PkeySetPub(ctx, &pub) == CRYPT_SUCCESS);
+    ASSERT_TRUE(CRYPT_EAL_PkeyVerify(ctx, CRYPT_MD_SM3, msg, sizeof(msg), sign, sizeof(sign)) == CRYPT_SUCCESS);
+
+    dupCtx = CRYPT_EAL_PkeyDupCtx(ctx);
+    ASSERT_TRUE(dupCtx != NULL);
+    ASSERT_TRUE(CRYPT_EAL_PkeyVerify(dupCtx, CRYPT_MD_SM3, msg, sizeof(msg), sign, sizeof(sign)) == CRYPT_SUCCESS);
+    printf("sm2 verify success\r\n");
+
+EXIT:
+    CRYPT_EAL_PkeyFreeCtx(ctx);
+    CRYPT_EAL_PkeyFreeCtx(dupCtx);
+}
+
+void test_sm2_enc_and_dec(void) {
+    uint8_t prvkey[32] = {
+        0x39, 0x45, 0x20, 0x8F, 0x7B, 0x21, 0x44, 0xB1, 0x3F, 0x36, 0xE3, 0x8A, 0xC6, 0xD3, 0x9F, 0x95,
+        0x88, 0x93, 0x93, 0x69, 0x28, 0x60, 0xB5, 0x1A, 0x42, 0xFB, 0x81, 0xEF, 0x4D, 0xF7, 0xC5, 0xB8};
+    uint8_t pubkey[65] = {
+        0x04, 0x09, 0xf9, 0xdf, 0x31, 0x1e, 0x54, 0x21, 0xa1, 0x50, 0xdd, 0x7d, 0x16, 0x1e, 0x4b, 0xc5,
+        0xc6, 0x72, 0x17, 0x9f, 0xad, 0x18, 0x33, 0xfc, 0x07, 0x6b, 0xb0, 0x8f, 0xf3, 0x56, 0xf3, 0x50,
+        0x20, 0xcc, 0xea, 0x49, 0x0c, 0xe2, 0x67, 0x75, 0xa5, 0x2d, 0xc6, 0xea, 0x71, 0x8c, 0xc1, 0xaa,
+        0x60, 0x0a, 0xed, 0x05, 0xfb, 0xf3, 0x5e, 0x08, 0x4a, 0x66, 0x32, 0xf6, 0x07, 0x2d, 0xa9, 0xad,
+        0x13,
+    };
+    uint8_t pt[19] = {
+        0x65, 0x6E, 0x63, 0x72, 0x79, 0x70, 0x74, 0x69, 0x6F, 0x6E, 0x20, 0x73, 0x74, 0x61, 0x6E, 0x64,
+        0x61, 0x72, 0x64
+    };
+    uint8_t ct[] = {
+        0x30, 0x7c, 0x02, 0x20, 0x04, 0xeb, 0xfc, 0x71, 0x8e, 0x8d, 0x17, 0x98, 0x62, 0x04, 0x32, 0x26, 0x8e, 0x77, 0xfe, 0xb6,
+        0x41, 0x5e, 0x2e, 0xde, 0x0e, 0x07, 0x3c, 0x0f, 0x4f, 0x64, 0x0e, 0xcd, 0x2e, 0x14, 0x9a, 0x73, 0x02, 0x21, 0x00, 0xe8,
+        0x58, 0xf9, 0xd8, 0x1e, 0x54, 0x30, 0xa5, 0x7b, 0x36, 0xda, 0xab, 0x8f, 0x95, 0x0a, 0x3c, 0x64, 0xe6, 0xee, 0x6a, 0x63,
+        0x09, 0x4d, 0x99, 0x28, 0x3a, 0xff, 0x76, 0x7e, 0x12, 0x4d, 0xf0, 0x04, 0x20, 0x59, 0x98, 0x3c, 0x18, 0xf8, 0x09, 0xe2,
+        0x62, 0x92, 0x3c, 0x53, 0xae, 0xc2, 0x95, 0xd3, 0x03, 0x83, 0xb5, 0x4e, 0x39, 0xd6, 0x09, 0xd1, 0x60, 0xaf, 0xcb, 0x19,
+        0x08, 0xd0, 0xbd, 0x87, 0x66, 0x04, 0x13, 0x21, 0x88, 0x6c, 0xa9, 0x89, 0xca, 0x9c, 0x7d, 0x58, 0x08, 0x73, 0x07, 0xca,
+        0x93, 0x09, 0x2d, 0x65, 0x1e, 0xfa
+    };
+    CRYPT_EAL_PkeyPrv prv = {
+        .id = CRYPT_PKEY_SM2,
+        .key.eccPrv.data = prvkey,
+        .key.eccPrv.len = sizeof(prvkey),
+    };
+    CRYPT_EAL_PkeyPub pub = {
+        .id = CRYPT_PKEY_SM2,
+        .key.eccPub.data = pubkey,
+        .key.eccPub.len = sizeof(pubkey),
+    };
+
+    uint8_t encout[MAX_PLAIN_TEXT_LEN + CIPHER_TEXT_EXTRA_LEN] = {0};
+    uint8_t decout[MAX_PLAIN_TEXT_LEN] = {0};
+    uint32_t encoutlen = sizeof(encout);
+    uint32_t decoutLen = sizeof(decout);
+
+    CRYPT_EAL_PkeyCtx *ctx = CRYPT_EAL_PkeyNewCtx(CRYPT_PKEY_SM2);
+    ASSERT_TRUE(ctx != NULL);
+    ASSERT_EQ(CRYPT_EAL_PkeySetPub(ctx, &pub), CRYPT_SUCCESS);
+    ASSERT_TRUE(CRYPT_EAL_PkeyEncrypt(ctx, pt, sizeof(pt), encout, &encoutlen) == CRYPT_SUCCESS);
+    ASSERT_TRUE(memcmp(encout, ct, sizeof(ct)) == 0);
+    printf("sm2 enc success\r\n");
+
+    CRYPT_EAL_PkeyFreeCtx(ctx);
+    ctx = CRYPT_EAL_PkeyNewCtx(CRYPT_PKEY_SM2);
+    ASSERT_TRUE(ctx != NULL);
+    ASSERT_TRUE(CRYPT_EAL_PkeySetPrv(ctx, &prv) == CRYPT_SUCCESS);
+    ASSERT_EQ(CRYPT_EAL_PkeyDecrypt(ctx, ct, sizeof(ct), decout, &decoutLen), CRYPT_SUCCESS);
+    ASSERT_TRUE(decoutLen == sizeof(pt));
+    ASSERT_TRUE(memcmp(decout, pt, sizeof(pt)) == 0);
+    printf("sm2 dec success\r\n");
+
+EXIT:
+    CRYPT_EAL_PkeyFreeCtx(ctx);
+}
+
+void test_openhitls(void) {
+    printf("Starting OpenHitls Crypt Test...\r\n");
     BSL_ERR_Init(); // 初始化错误码模块
     // 调用算法API接口之前需要调用BSL_SAL_CallBack_Ctrl函数注册malloc和free函数。该步骤仅需执行一次
     // 如果未注册并且默认能力没有被裁剪,使用默认linux实现
     BSL_SAL_CallBack_Ctrl(BSL_SAL_MEM_MALLOC, (void *)(uintptr_t)malloc);
     BSL_SAL_CallBack_Ctrl(BSL_SAL_MEM_FREE, (void *)(uintptr_t)free);
-    int32_t ret = CRYPT_EAL_Init(CRYPT_EAL_INIT_CPU | CRYPT_EAL_INIT_PROVIDER);
-    uint8_t input[] = "abc"; // Any length, for example, 100 bytes.
-    uint32_t inLen = strlen(input);
-    uint8_t out[32]; // SM3 digest length is 32.
-    CRYPT_EAL_MdCTX *ctx = NULL;
-    ctx = CRYPT_EAL_MdNewCtx(CRYPT_MD_SM3);
-    if (ctx == NULL) {
-        PrintLastError();
-        goto EXIT;
+    if (CRYPT_EAL_Init(CRYPT_EAL_INIT_CPU | CRYPT_EAL_INIT_PROVIDER) != CRYPT_SUCCESS) {
+        printf("CRYPT_EAL_Init failed\r\n");
+        return;
     }
-    uint32_t outLen = CRYPT_EAL_MdGetDigestSize(CRYPT_MD_SM3);
-    ret = CRYPT_EAL_MdInit(ctx);
-    if (ret != CRYPT_SUCCESS) {
-        PrintLastError();
-        goto EXIT;
-    }
-    ret = CRYPT_EAL_MdUpdate(ctx, input, inLen);
-    if (ret != CRYPT_SUCCESS) {
-        PrintLastError();
-        goto EXIT;
-    }
-    ret = CRYPT_EAL_MdFinal(ctx, out, &outLen);
-    if (ret != CRYPT_SUCCESS) {
-        PrintLastError();
-        goto EXIT;
-    }
-    printf("SM3 hash result for \"abc\": \r\n");
-    for (uint32_t i = 0; i < outLen; i++) {
-        printf("%02x", out[i]);
-    }
-    printf("\r\n");
-    uint8_t input1[] = "abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd";
-    ret = CRYPT_EAL_MdInit(ctx);
-    if (ret != CRYPT_SUCCESS) {
-        PrintLastError();
-        goto EXIT;
-    }
-    ret = CRYPT_EAL_MdUpdate(ctx, input1, strlen(input1));
-    if (ret != CRYPT_SUCCESS) {
-        PrintLastError();
-        goto EXIT;
-    }
-    ret = CRYPT_EAL_MdFinal(ctx, out, &outLen);
-    if (ret != CRYPT_SUCCESS) {
-        PrintLastError();
-        goto EXIT;
-    }
-    printf("SM3 hash result for \"abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd\": \r\n");
-    for (uint32_t i = 0; i < outLen; i++) {
-        printf("%02x", out[i]);
-    }
-    printf("\r\n");
-EXIT:
-    // 释放上下文内存。
-    CRYPT_EAL_RandDeinit();
-    BSL_ERR_DeInit();
+    test_sm3();
+    test_sm2_sign_and_verify();
+    test_sm2_enc_and_dec();
 }
