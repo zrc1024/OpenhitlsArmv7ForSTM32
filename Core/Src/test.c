@@ -50,6 +50,7 @@ void test_sm3(void) {
     ASSERT_EQ(memcmp(out, out2, sizeof(out2)), 0);
     ASSERT_EQ(CRYPT_EAL_Md(CRYPT_MD_SM3, in2, sizeof(in2), out, &outLen), CRYPT_SUCCESS);
     ASSERT_EQ(memcmp(out, out2, sizeof(out2)), 0);
+    printf("sm3 success\r\n");
 EXIT:
     CRYPT_EAL_MdFreeCtx(ctx);
 
