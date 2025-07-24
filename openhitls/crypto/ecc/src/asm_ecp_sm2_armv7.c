@@ -23,792 +23,14 @@
 #include "bsl_err_internal.h"
 #include "asm_ecp_sm2_armv7.h"
 
-/// The type representing a 512-bit number to store the multiplication product of sm2_fp.
-typedef uint32_t Sm2Dfp[16];
-
 /// The type representing a Non-Adjacent Form (NAF) for efficient scalar multiplication
 typedef int8_t  Sm2Naf[257];
 
 static const Sm2Fp Sm2Zero = {0};
+
 static const Sm2Fp Sm2One = {1};
-static const Sm2Fp Sm2Prime = {0xFFFFFFFFU, 0xFFFFFFFFU, 0x00000000U, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFEU};
-// Definition of the basic arithmetic function
 
-// #define ADD_ITERAT(u, r, a, b)      u  = a + u + b; r = u; u >>= 32;
-// #define SUB_ITERAT(u, r, a, b)      u  = a - u - b; r = u; u >>= 63;
-// #define MUL_ITERAT(u, r, a, b)      u += r + a * b; r = u; u >>= 32;
-//
-// static uint32_t Add(Sm2Fp r, const Sm2Fp a, const Sm2Fp b) {
-//     uint64_t u = 0;
-//     ADD_ITERAT(u, r[0], a[0], b[0])
-//     ADD_ITERAT(u, r[1], a[1], b[1])
-//     ADD_ITERAT(u, r[2], a[2], b[2])
-//     ADD_ITERAT(u, r[3], a[3], b[3])
-//     ADD_ITERAT(u, r[4], a[4], b[4])
-//     ADD_ITERAT(u, r[5], a[5], b[5])
-//     ADD_ITERAT(u, r[6], a[6], b[6])
-//     ADD_ITERAT(u, r[7], a[7], b[7])
-//     return u;
-// }
-//
-// static uint32_t Sub(Sm2Fp r, const Sm2Fp a, const Sm2Fp b) {
-//     uint64_t u = 0;
-//     SUB_ITERAT(u, r[0], a[0], b[0])
-//     SUB_ITERAT(u, r[1], a[1], b[1])
-//     SUB_ITERAT(u, r[2], a[2], b[2])
-//     SUB_ITERAT(u, r[3], a[3], b[3])
-//     SUB_ITERAT(u, r[4], a[4], b[4])
-//     SUB_ITERAT(u, r[5], a[5], b[5])
-//     SUB_ITERAT(u, r[6], a[6], b[6])
-//     SUB_ITERAT(u, r[7], a[7], b[7])
-//     return u;
-// }
-//
-// static void Mul(Sm2Dfp r, const Sm2Fp a, const Sm2Fp b) {
-//     uint64_t u, v;
-//     for (int i = 0; i < 8; i++) {
-//         u = 0, v = a[i];
-//         MUL_ITERAT(u, r[i + 0], v, b[0])
-//         MUL_ITERAT(u, r[i + 1], v, b[1])
-//         MUL_ITERAT(u, r[i + 2], v, b[2])
-//         MUL_ITERAT(u, r[i + 3], v, b[3])
-//         MUL_ITERAT(u, r[i + 4], v, b[4])
-//         MUL_ITERAT(u, r[i + 5], v, b[5])
-//         MUL_ITERAT(u, r[i + 6], v, b[6])
-//         MUL_ITERAT(u, r[i + 7], v, b[7])
-//         r[i + 8] = u;
-//     }
-// }
-//
-// static void Sqr(Sm2Dfp r, const Sm2Fp a) {
-//     uint64_t u;
-//     const uint64_t a0 = a[0], a1 = a[1], a2 = a[2], a3 = a[3];
-//     const uint64_t a4 = a[4], a5 = a[5], a6 = a[6], a7 = a[7];
-//     u = 0;
-//     MUL_ITERAT(u, r[0 + 0], a0, a0)
-//     MUL_ITERAT(u, r[0 + 1], a0, a1)
-//     MUL_ITERAT(u, r[0 + 2], a0, a2)
-//     MUL_ITERAT(u, r[0 + 3], a0, a3)
-//     MUL_ITERAT(u, r[0 + 4], a0, a4)
-//     MUL_ITERAT(u, r[0 + 5], a0, a5)
-//     MUL_ITERAT(u, r[0 + 6], a0, a6)
-//     MUL_ITERAT(u, r[0 + 7], a0, a7)
-//     r[0 + 8] = u;
-//
-//     u = 0;
-//     MUL_ITERAT(u, r[1 + 0], a1, a0)
-//     MUL_ITERAT(u, r[1 + 1], a1, a1)
-//     MUL_ITERAT(u, r[1 + 2], a1, a2)
-//     MUL_ITERAT(u, r[1 + 3], a1, a3)
-//     MUL_ITERAT(u, r[1 + 4], a1, a4)
-//     MUL_ITERAT(u, r[1 + 5], a1, a5)
-//     MUL_ITERAT(u, r[1 + 6], a1, a6)
-//     MUL_ITERAT(u, r[1 + 7], a1, a7)
-//     r[1 + 8] = u;
-//
-//     u = 0;
-//     MUL_ITERAT(u, r[2 + 0], a2, a0)
-//     MUL_ITERAT(u, r[2 + 1], a2, a1)
-//     MUL_ITERAT(u, r[2 + 2], a2, a2)
-//     MUL_ITERAT(u, r[2 + 3], a2, a3)
-//     MUL_ITERAT(u, r[2 + 4], a2, a4)
-//     MUL_ITERAT(u, r[2 + 5], a2, a5)
-//     MUL_ITERAT(u, r[2 + 6], a2, a6)
-//     MUL_ITERAT(u, r[2 + 7], a2, a7)
-//     r[2 + 8] = u;
-//
-//     u = 0;
-//     MUL_ITERAT(u, r[3 + 0], a3, a0)
-//     MUL_ITERAT(u, r[3 + 1], a3, a1)
-//     MUL_ITERAT(u, r[3 + 2], a3, a2)
-//     MUL_ITERAT(u, r[3 + 3], a3, a3)
-//     MUL_ITERAT(u, r[3 + 4], a3, a4)
-//     MUL_ITERAT(u, r[3 + 5], a3, a5)
-//     MUL_ITERAT(u, r[3 + 6], a3, a6)
-//     MUL_ITERAT(u, r[3 + 7], a3, a7)
-//     r[3 + 8] = u;
-//
-//     u = 0;
-//     MUL_ITERAT(u, r[4 + 0], a4, a0)
-//     MUL_ITERAT(u, r[4 + 1], a4, a1)
-//     MUL_ITERAT(u, r[4 + 2], a4, a2)
-//     MUL_ITERAT(u, r[4 + 3], a4, a3)
-//     MUL_ITERAT(u, r[4 + 4], a4, a4)
-//     MUL_ITERAT(u, r[4 + 5], a4, a5)
-//     MUL_ITERAT(u, r[4 + 6], a4, a6)
-//     MUL_ITERAT(u, r[4 + 7], a4, a7)
-//     r[4 + 8] = u;
-//
-//     u = 0;
-//     MUL_ITERAT(u, r[5 + 0], a5, a0)
-//     MUL_ITERAT(u, r[5 + 1], a5, a1)
-//     MUL_ITERAT(u, r[5 + 2], a5, a2)
-//     MUL_ITERAT(u, r[5 + 3], a5, a3)
-//     MUL_ITERAT(u, r[5 + 4], a5, a4)
-//     MUL_ITERAT(u, r[5 + 5], a5, a5)
-//     MUL_ITERAT(u, r[5 + 6], a5, a6)
-//     MUL_ITERAT(u, r[5 + 7], a5, a7)
-//     r[5 + 8] = u;
-//
-//     u = 0;
-//     MUL_ITERAT(u, r[6 + 0], a6, a0)
-//     MUL_ITERAT(u, r[6 + 1], a6, a1)
-//     MUL_ITERAT(u, r[6 + 2], a6, a2)
-//     MUL_ITERAT(u, r[6 + 3], a6, a3)
-//     MUL_ITERAT(u, r[6 + 4], a6, a4)
-//     MUL_ITERAT(u, r[6 + 5], a6, a5)
-//     MUL_ITERAT(u, r[6 + 6], a6, a6)
-//     MUL_ITERAT(u, r[6 + 7], a6, a7)
-//     r[6 + 8] = u;
-//
-//     u = 0;
-//     MUL_ITERAT(u, r[7 + 0], a7, a0)
-//     MUL_ITERAT(u, r[7 + 1], a7, a1)
-//     MUL_ITERAT(u, r[7 + 2], a7, a2)
-//     MUL_ITERAT(u, r[7 + 3], a7, a3)
-//     MUL_ITERAT(u, r[7 + 4], a7, a4)
-//     MUL_ITERAT(u, r[7 + 5], a7, a5)
-//     MUL_ITERAT(u, r[7 + 6], a7, a6)
-//     MUL_ITERAT(u, r[7 + 7], a7, a7)
-//     r[7 + 8] = u;
-//
-// }
-//
-// static void Haf(Sm2Fp r, const Sm2Fp a) {
-//     r[0] = a[0] >> 1 | a[1] << 31;
-//     r[1] = a[1] >> 1 | a[2] << 31;
-//     r[2] = a[2] >> 1 | a[3] << 31;
-//     r[3] = a[3] >> 1 | a[4] << 31;
-//     r[4] = a[4] >> 1 | a[5] << 31;
-//     r[5] = a[5] >> 1 | a[6] << 31;
-//     r[6] = a[6] >> 1 | a[7] << 31;
-//     r[7] = a[7] >> 1;
-// }
-//
-// static void Dou(Sm2Fp r, const Sm2Fp a) {
-//     r[7] = a[7] << 1 | a[6] >> 31;
-//     r[6] = a[6] << 1 | a[5] >> 31;
-//     r[5] = a[5] << 1 | a[4] >> 31;
-//     r[4] = a[4] << 1 | a[3] >> 31;
-//     r[3] = a[3] << 1 | a[2] >> 31;
-//     r[2] = a[2] << 1 | a[1] >> 31;
-//     r[1] = a[1] << 1 | a[0] >> 31;
-//     r[0] = a[0] << 1;
-// }
-
-// Definition of the modulo sm2_p arithmetic function
-
-static int ECP_Sm2FpIsOdd(const Sm2Fp a){
-    return (int) a[0] & 1;
-}
-
-static int ECP_Sm2FpIsEven(const Sm2Fp a){
-    return (int) (a[0] & 1) ^ 1;
-}
-
-static int ECP_Sm2FpIsZero(const Sm2Fp a) {
-    return a[0] == 0 && a[1] == 0 && a[2] == 0 && a[3] == 0 && a[4] == 0 && a[5] == 0 && a[6] == 0 && a[7] == 0;
-}
-
-static int ECP_Sm2FpNonZero(const Sm2Fp a) {
-    return a[0] > 0 || a[1] > 0 || a[2] > 0 || a[3] > 0 || a[4] > 0 || a[5] > 0 || a[6] > 0 || a[7] > 0;
-}
-
-static int ECP_Sm2FpEqu(const Sm2Fp a, const Sm2Fp b) {
-    return a[0] == b[0] && a[1] == b[1] && a[2] == b[2] && a[3] == b[3] && a[4] == b[4] && a[5] == b[5] && a[6] == b[6] && a[7] == b[7];
-}
-
-// static int ECP_Sm2FpCmp(const Sm2Fp a, const Sm2Fp b) {
-//     if (a[7] > b[7]) return 1;
-//     if (a[7] < b[7]) return 0;
-//     if (a[6] > b[6]) return 1;
-//     if (a[6] < b[6]) return 0;
-//     if (a[5] > b[5]) return 1;
-//     if (a[5] < b[5]) return 0;
-//     if (a[4] > b[4]) return 1;
-//     if (a[4] < b[4]) return 0;
-//     if (a[3] > b[3]) return 1;
-//     if (a[3] < b[3]) return 0;
-//     if (a[2] > b[2]) return 1;
-//     if (a[2] < b[2]) return 0;
-//     if (a[1] > b[1]) return 1;
-//     if (a[1] < b[1]) return 0;
-//     if (a[0] > b[0]) return 1;
-//     if (a[0] < b[0]) return 0;
-//     return 1;
-// }
-//
-// static void ECP_Sm2FpNeg(Sm2Fp r, const Sm2Fp a) {
-//     Sub(r, Sm2Prime, a);
-// }
-//
-// static void ECP_Sm2FpHaf(Sm2Fp r, const Sm2Fp a) {
-//     // The constant value representing the value (p + 1) / 2.
-//     static const Sm2Fp s = {0x00000000U, 0x80000000U, 0x80000000U, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0x7FFFFFFFU, 0x7FFFFFFFU};
-//     if (ECP_Sm2FpIsEven(a)) {
-//         Haf(r,  a);
-//     } else {
-//         Haf(r, a);
-//         Add(r, r, s);
-//     }
-// }
-//
-// static void ECP_Sm2FpDou(Sm2Fp r, const Sm2Fp a) {
-//     if (a[7] >> 31) {
-//         Dou(r, a);
-//         Sub(r, r, Sm2Prime);
-//     }else {
-//         Dou(r, a);
-//     }
-// }
-
-// static void ECP_Sm2FpRec(Sm2Fp r, const Sm2Dfp c) {
-//     // the middle value
-//     uint64_t w0 = 0, w1 = 0, w2 = 0, w3 = 0, w4 = 0, w5 = 0;
-//     w0 = w0 + c[8] + c[9] + c[10] + c[11];
-//     w1 = w1 + c[8] + c[13];
-//     w2 = w2 + c[9] + c[14];
-//     w3 = w3 + c[14] + c[15];
-//     w4 = w4 + w3 + c[13];
-//     w5 = w5 + w4 + c[12];
-//     w0 = w0 + w5;
-//
-//     // t = c mod sm2_p
-//     uint64_t t0, t1, t2, t3, t4, t5, t6, t7;
-//     t0 = c[0] + w0 + w4;
-//     t1 = c[1] + w0 + w4 - w1;
-//     t2 = c[2] - w1 - w2;
-//     t3 = c[3] + w5 + w1 + c[11];
-//     t4 = c[4] + w5 + w2;
-//     t5 = c[5] + w4 + c[10] + c[15];
-//     t6 = c[6] + w3 + c[11];
-//     t7 = c[7] + w0 + w5 + c[15];
-//
-//     // clear the top 32 bits
-//     t1 += (int) (t0 >> 32);
-//     t0 &= 0xFFFFFFFF;
-//     t2 += (int) (t1 >> 32);
-//     t1 &= 0xFFFFFFFF;
-//     t3 += (int) (t2 >> 32);
-//     t2 &= 0xFFFFFFFF;
-//     t4 += (int) (t3 >> 32);
-//     t3 &= 0xFFFFFFFF;
-//     t5 += (int) (t4 >> 32);
-//     t4 &= 0xFFFFFFFF;
-//     t6 += (int) (t5 >> 32);
-//     t5 &= 0xFFFFFFFF;
-//     t7 += (int) (t6 >> 32);
-//     t6 &= 0xFFFFFFFF;
-//
-//     // small reduction
-//     t0 += (int) (t7 >> 32);
-//     t2 -= (int) (t7 >> 32);
-//     t3 += (int) (t7 >> 32);
-//     t7 += (int) (t7 >> 32);
-//     t1 += (int) (t0 >> 32);
-//     t2 += (int) (t1 >> 32);
-//     t3 += (int) (t2 >> 32);
-//     t4 += (int) (t3 >> 32);
-//     t5 += (int) (t4 >> 32);
-//     t6 += (int) (t5 >> 32);
-//     t7 += (int) (t6 >> 32);
-//
-//     // store
-//     r[0] = t0;
-//     r[1] = t1;
-//     r[2] = t2;
-//     r[3] = t3;
-//     r[4] = t4;
-//     r[5] = t5;
-//     r[6] = t6;
-//     r[7] = t7;
-// }
-
-void ECP_Sm2FpSet(Sm2Fp r, const Sm2Fp a) {
-    memcpy(r, a, sizeof(Sm2Fp));
-}
-
-// void ECP_Sm2FpAdd(Sm2Fp r, const Sm2Fp a, const Sm2Fp b) {
-//     if (Add(r, a, b)) {
-//         Sub(r, r, Sm2Prime);
-//     }
-// }
-//
-// void ECP_Sm2FpSub(Sm2Fp r, const Sm2Fp a, const Sm2Fp b) {
-//     if (Sub(r, a, b)) {
-//         Add(r, r, Sm2Prime);
-//     }
-// }
-//
-// void ECP_Sm2FpMul(Sm2Fp r, const Sm2Fp a, const Sm2Fp b) {
-//     Sm2Dfp c = {0};
-//     Mul(c, a, b);
-//     ECP_Sm2FpRec(r, c);
-// }
-//
-// void ECP_Sm2FpSqr(Sm2Fp r, const Sm2Fp a) {
-//     Sm2Dfp c = {0};
-//     Sqr(c, a);
-//     ECP_Sm2FpRec(r, c);
-// }
-//
-// void ECP_Sm2FpInv(Sm2Fp r, const Sm2Fp q) {
-//
-//     Sm2Fp u, v, a = {1}, c = {0};
-//     ECP_Sm2FpSet(u, q);
-//     ECP_Sm2FpSet(v, Sm2Prime);
-//     while (ECP_Sm2FpNonZero(u)) {
-//         while (u[0]){
-//             while (ECP_Sm2FpIsEven(u)) {
-//                 ECP_Sm2FpHaf(u, u);
-//                 ECP_Sm2FpHaf(a, a);
-//             }
-//             while (ECP_Sm2FpIsEven(v)) {
-//                 ECP_Sm2FpHaf(v, v);
-//                 ECP_Sm2FpHaf(c, c);
-//             }
-//             if (ECP_Sm2FpCmp(u, v)) {
-//                 ECP_Sm2FpSub(u, u, v);
-//                 ECP_Sm2FpSub(a, a, c);
-//             } else {
-//                 ECP_Sm2FpSub(v, v, u);
-//                 ECP_Sm2FpSub(c, c, a);
-//             }
-//         }
-//     }
-//     ECP_Sm2FpSet(r, c);
-// }
-//
-// static void ECP_Sm2FnHaf(Sm2Fp r, const Sm2Fp a) {
-//     static const Sm2Fp t = {0x9CEAA092U, 0xA9DDFA04U, 0x90E30295U, 0xB901EFB5U, 0xFFFFFFFFU, 0xFFFFFFFFU, 0x7FFFFFFFU, 0x7FFFFFFFU};
-//     if (a[0] & 1) {
-//         Haf(r,  a);
-//         Add(r, r, t);
-//     } else {
-//         Haf(r, a);
-//     }
-// }
-//
-// static void ECP_Sm2FnRec(Sm2Fp r, const Sm2Dfp a) {
-//     //nu = 2^512 / sm2_n = 0x1000000010000000100000001000000018DFC2096FA323C0112AC6361F15149A0, 存储时省略了第257位, 计算时补上
-//     static const Sm2Fp u = {0xF15149A0U, 0x12AC6361U, 0xFA323C01U, 0x8DFC2096U, 0x00000001U, 0x00000001U, 0x00000001U, 0x00000001U};
-//     //b = (a * u) >> 256
-//     Sm2Dfp b = {0}, c = {0};
-//     Mul(b, a + 8, u);
-//     const uint32_t k = Add(b + 8, b + 8, a + 8);
-//
-//     // c = b * n
-//     Mul(c, b + 8, Sm2Order);
-//     if (k)
-//         Add(c + 8, c + 8, Sm2Order);
-//
-//     // r = a - c , 257位以上必然为0
-//     if (a[8] - c[8] - Sub(r, a, c)){
-//         Sub(r, r, Sm2Order);
-//     }
-// }
-//
-// void ECP_Sm2FnAdd(Sm2Fp r, const Sm2Fp a, const Sm2Fp b) {
-//     if (Add(r, a, b)) {
-//         Sub(r, r, Sm2Order);
-//     }
-// }
-//
-// void ECP_Sm2FnSub(Sm2Fp r, const Sm2Fp a, const Sm2Fp b) {
-//     if (Sub(r, a, b)) {
-//         Add(r, r, Sm2Order);
-//     }
-// }
-//
-// void ECP_Sm2FnMul(Sm2Fp r, const Sm2Fp a, const Sm2Fp b) {
-//     Sm2Dfp c = {0};
-//     Mul(c, a, b);
-//     ECP_Sm2FnRec(r, c);
-// }
-//
-// void ECP_Sm2FnInv(Sm2Fp r, const Sm2Fp q) {
-//     Sm2Fp u, v, a = {1}, c = {0};
-//     ECP_Sm2FpSet(u, q);
-//     ECP_Sm2FpSet(v, Sm2Order);
-//     while (ECP_Sm2FpNonZero(u)) {
-//         while (u[0]) {
-//             while (ECP_Sm2FpIsEven(u)) {
-//                 Haf(u, u);
-//                 ECP_Sm2FnHaf(a, a);
-//             }
-//             while (ECP_Sm2FpIsEven(v)) {
-//                 Haf(v, v);
-//                 ECP_Sm2FnHaf(c, c);
-//             }
-//             if (ECP_Sm2FpCmp(u, v)) {
-//                 Sub(u, u, v);
-//                 if (Sub(a, a, c))
-//                     Add(a, a, Sm2Order);
-//             } else {
-//                 Sub(v, v, u);
-//                 if (Sub(c, c, a))
-//                     Add(c, c, Sm2Order);
-//             }
-//         }
-//     }
-//     ECP_Sm2FpSet(r, c);
-// }
-
-static void ECP_Sm2FpNaf(Sm2Naf r, const uint8_t w, const Sm2Fp n) {
-    if (w > 7)
-        return;     // w > 7 is not supported unless the sm2_naf type definition is expanded from int8_t[257] to int[257]
-
-    int i = 256;
-    Sm2Fp k, t;
-    ECP_Sm2FpSet(k, n);
-    while (ECP_Sm2FpCmp(k, Sm2One)) {
-        if (ECP_Sm2FpIsOdd(k)) {
-            ECP_Sm2FpSet(t, Sm2Zero);
-            t[0] = k[0] & ((1 << w) - 1);
-            if (t[0] >> (w - 1)) {
-                t[0] = (1 << w) - t[0];
-                r[i] = (int8_t) -t[0];
-            } else {
-                r[i] = (int8_t) t[0];
-            }
-            if (r[i] > 0)
-                ECP_Sm2FpSub(k, k, t);
-            else
-                ECP_Sm2FpAdd(k, k, t);
-        } else
-            r[i] = 0;
-        ECP_Sm2FpHaf(k, k);
-        i--;
-    }
-    while (i >= 0) {
-        r[i--] = 0;
-    }
-}
-
-static void ECP_Sm2FpNafP(int8_t K[52], const Sm2Fp k) {
-    Sm2Naf kn;
-    ECP_Sm2FpNaf(kn, 2, k);
-    int i, j = 0;
-    for (i = 256; i > 2; i = i-5){
-        K[j++] = (int8_t) (kn[i] + (kn[i-1]<<1) + (kn[i-2]<<2) + (kn[i-3]<<3) + (kn[i-4]<<4));
-    }
-    K[j] = (int8_t) (kn[1] + (kn[0]<<1));
-}
-
-//**********************************************************************************************************************
-
-void ECP_Sm2PotToAffine(const Sm2Point *a, Sm2Point *r) {
-    Sm2Fp t1, t2;
-    ECP_Sm2FpInv(t1, a->z);
-    ECP_Sm2FpSqr(t2, t1);
-    ECP_Sm2FpMul(r->x, t2, a->x);
-    ECP_Sm2FpMul(t2, t2, t1);
-    ECP_Sm2FpMul(r->y, t2, a->y);
-    ECP_Sm2FpSet(r->z, Sm2One);
-}
-
-static void ECP_Sm2PotCopy(Sm2Point *p, const Sm2Point *q) {
-    memcpy(p, q, sizeof(Sm2Point));
-}
-
-static void ECP_Sm2PotSet(Sm2Point *p, const Sm2Fp x, const Sm2Fp y, const Sm2Fp z) {
-    ECP_Sm2FpSet(p->x, x);
-    ECP_Sm2FpSet(p->y, y);
-    ECP_Sm2FpSet(p->z, z);
-}
-
-static void ECP_Sm2PotSetInfinity(Sm2Point *r) {
-    ECP_Sm2PotSet(r, Sm2One, Sm2One, Sm2Zero);
-}
-
-static int ECP_Sm2PotAtInfinity(const Sm2Point *r){
-    return ECP_Sm2FpIsZero(r->z);
-}
-
-void ECP_Sm2PotAdd(Sm2Point *r, const Sm2Point *p, const Sm2Point *q) {
-    // Check if one of the points is the point at infinity
-    if (ECP_Sm2PotAtInfinity(p)) {
-        ECP_Sm2PotCopy(r, q);
-        return;
-    }
-    if (ECP_Sm2PotAtInfinity(q)) {
-        ECP_Sm2PotCopy(r, p);
-        return;
-    }
-
-    const uint32_t *x1 = p->x, *y1 = p->y, *z1 = p->z;
-    const uint32_t *x2 = q->x, *y2 = q->y, *z2 = q->z;
-    Sm2Fp x3, y3, z3, u1, u2, s1, s2, h, n, h2, h3, u1h2, t1, t2;
-
-    ECP_Sm2FpSqr(t1, z1);                     // t1 = z1^2
-    ECP_Sm2FpSqr(t2, z2);                     // t2 = z2^2
-    ECP_Sm2FpMul(u1, x1, t2);                 // u1 = x1 * z2^2
-    ECP_Sm2FpMul(u2, x2, t1);                 // u2 = x2 * z1^2
-    ECP_Sm2FpMul(t1, t1, z1);                 // t1 = z1^3
-    ECP_Sm2FpMul(t2, t2, z2);                 // t2 = z2^3
-    ECP_Sm2FpMul(s1, y1, t2);                 // s1 = y1 * z2^3
-    ECP_Sm2FpMul(s2, y2, t1);                 // s2 = y2 * z1^3
-    if (ECP_Sm2FpEqu(u1, u2)) {
-        if (ECP_Sm2FpEqu(s1, s2))
-            ECP_Sm2PotDou(r, p);
-        else
-            ECP_Sm2PotSetInfinity(r);
-        return;
-    }
-    ECP_Sm2FpSub(h, u2, u1);                  // h = u2 - u1
-    ECP_Sm2FpSub(n, s2, s1);                  // n = s2 - s1
-    ECP_Sm2FpSqr(h2, h);                      // h2 = h^2
-    ECP_Sm2FpMul(h3, h2, h);                  // h3 = h^3
-    ECP_Sm2FpMul(u1h2, u1, h2);               // u1h2 = u1 * h^2
-    ECP_Sm2FpDou(t1, u1h2);                   // t1 = 2u1h2
-    ECP_Sm2FpSqr(x3, n);                      // x3 = n^2
-    ECP_Sm2FpSub(x3, x3, h3);                 // x3 = n^2 - h3
-    ECP_Sm2FpSub(x3, x3, t1);                 // x3 = n^2 - h3 - 2u1h2
-    ECP_Sm2FpMul(t1, s1, h3);                 // t1 = s1 * h3
-    ECP_Sm2FpSub(y3, u1h2, x3);               // y3 = u1h2 - x3
-    ECP_Sm2FpMul(y3, y3, n);                  // y3 = n * (u1h2 - x3)
-    ECP_Sm2FpSub(y3, y3, t1);                 // y3 = n * (u1h2 - x3) - s1 * h3
-    ECP_Sm2FpMul(z3, z1, z2);                 // z3 = z1 * z2
-    ECP_Sm2FpMul(z3, z3, h);                  // z3 = h * z1 * z2
-    ECP_Sm2PotSet(r, x3, y3, z3);
-}
-
-void ECP_Sm2PotSub(Sm2Point *r, const Sm2Point *p, const Sm2Point *q) {
-    // Check if one of the points is the point at infinity
-    if (ECP_Sm2PotAtInfinity(p)) {
-        ECP_Sm2PotCopy(r, q);
-        return;
-    }
-    if (ECP_Sm2PotAtInfinity(q)) {
-        ECP_Sm2PotCopy(r, p);
-        return;
-    }
-
-    const uint32_t *x1 = p->x, *y1 = p->y, *z1 = p->z, *x2 = q->x, *z2 = q->z;
-    Sm2Fp y2, x3, y3, z3, u1, u2, s1, s2, h, n, h2, h3, u1h2, t1, t2;
-    ECP_Sm2FpNeg(y2, q->y);
-    ECP_Sm2FpSqr(t1, z1);                     // t1 = z1^2
-    ECP_Sm2FpSqr(t2, z2);                     // t2 = z2^2
-    ECP_Sm2FpMul(u1, x1, t2);                 // u1 = x1 * z2^2
-    ECP_Sm2FpMul(u2, x2, t1);                 // u2 = x2 * z1^2
-    ECP_Sm2FpMul(t1, t1, z1);                 // t1 = z1^3
-    ECP_Sm2FpMul(t2, t2, z2);                 // t2 = z2^3
-    ECP_Sm2FpMul(s1, y1, t2);                 // s1 = y1 * z2^3
-    ECP_Sm2FpMul(s2, y2, t1);                 // s2 = y2 * z1^3
-    if (ECP_Sm2FpEqu(u1, u2)) {
-        if (ECP_Sm2FpEqu(s1, s2))
-            ECP_Sm2PotDou(r, p);
-        else
-            ECP_Sm2PotSetInfinity(r);
-        return;
-    }
-    ECP_Sm2FpSub(h, u2, u1);                  // h = u2 - u1
-    ECP_Sm2FpSub(n, s2, s1);                  // n = s2 - s1
-    ECP_Sm2FpSqr(h2, h);                      // h2 = h^2
-    ECP_Sm2FpMul(h3, h2, h);                  // h3 = h^3
-    ECP_Sm2FpMul(u1h2, u1, h2);               // u1h2 = u1 * h^2
-    ECP_Sm2FpDou(t1, u1h2);                   // t1 = 2u1h2
-    ECP_Sm2FpSqr(x3, n);                      // x3 = n^2
-    ECP_Sm2FpSub(x3, x3, h3);                 // x3 = n^2 - h3
-    ECP_Sm2FpSub(x3, x3, t1);                 // x3 = n^2 - h3 - 2u1h2
-    ECP_Sm2FpMul(t1, s1, h3);                 // t1 = s1 * h3
-    ECP_Sm2FpSub(y3, u1h2, x3);               // y3 = u1h2 - x3
-    ECP_Sm2FpMul(y3, y3, n);                  // y3 = n * (u1h2 - x3)
-    ECP_Sm2FpSub(y3, y3, t1);                 // y3 = n * (u1h2 - x3) - s1 * h3
-    ECP_Sm2FpMul(z3, z1, z2);                 // z3 = z1 * z2
-    ECP_Sm2FpMul(z3, z3, h);                  // z3 = h * z1 * z2
-    ECP_Sm2PotSet(r, x3, y3, z3);
-}
-
-void ECP_Sm2PotAddWithAffine(Sm2Point *r, const Sm2Point *p, const Sm2Point *q) {
-    if (ECP_Sm2PotAtInfinity(p)) {
-        ECP_Sm2PotCopy(r, q);
-        return;
-    }
-    if (ECP_Sm2FpIsZero(q->x) && ECP_Sm2FpIsZero(q->y)) {
-        ECP_Sm2PotCopy(r, p);
-        return;
-    }
-
-    const uint32_t *x1 = p->x, *y1 = p->y, *z1 = p->z, *x2 = q->x, *y2 = q->y;
-    Sm2Fp x3, y3, z3, t1, t2, t3, t4;
-
-    ECP_Sm2FpSqr(t1, z1);                     // t1 = A = z1^2
-    ECP_Sm2FpMul(t2, t1, z1);                 // t2 = B = z1 * A
-    ECP_Sm2FpMul(t1, t1, x2);                 // t1 = C = x2 * A
-    ECP_Sm2FpMul(t2, t2, y2);                 // t2 = D = y2 * B
-    ECP_Sm2FpSub(t1, t1, x1);                 // t1 = E = C - x1
-    ECP_Sm2FpSub(t2, t2, y1);                 // t2 = F = D - y1
-    if (ECP_Sm2FpEqu(t1, Sm2Zero)) {
-        if (ECP_Sm2FpEqu(t2, Sm2Zero)) {
-            Sm2Point t;
-            ECP_Sm2PotSet(&t, x2, y2, Sm2One);
-            ECP_Sm2PotDou(r, &t);
-        } else {
-            ECP_Sm2PotSetInfinity(r);
-        }
-        return;
-    }
-    ECP_Sm2FpMul(z3, z1, t1);                 // z3 = z1 * E
-    ECP_Sm2FpSqr(t3, t1);                     // t3 = G = E^2
-    ECP_Sm2FpMul(t4, t3, t1);                 // t4 = H = E^3
-    ECP_Sm2FpMul(t3, t3, x1);                 // t3 = I = x1 * G
-    ECP_Sm2FpDou(t1, t3);                     // t1 = 2I
-    ECP_Sm2FpSqr(x3, t2);                     // x3 = F^2
-    ECP_Sm2FpSub(x3, x3, t1);                 // x3 = F^2 - 2I
-    ECP_Sm2FpSub(x3, x3, t4);                 // x3 = F^2 - 2I - H
-    ECP_Sm2FpSub(t3, t3, x3);                 // t3 = I - x3
-    ECP_Sm2FpMul(t3, t3, t2);                 // t3 = (I - x3) * F
-    ECP_Sm2FpMul(t4, t4, y1);                 // t4 = y1 * H
-    ECP_Sm2FpSub(y3, t3, t4);                 // y3 = (I - x3) * F - y1 * H
-    ECP_Sm2PotSet(r, x3, y3, z3);
-}
-
-void ECP_Sm2PotSubWithAffine(Sm2Point *r, const Sm2Point *p, const Sm2Point *q) {
-    const uint32_t *x1 = p->x, *y1 = p->y, *z1 = p->z, *x2 = q->x;
-    Sm2Fp y2, x3, y3, z3, t1, t2, t3, t4;
-    ECP_Sm2FpNeg(y2, q->y);
-
-    if (ECP_Sm2PotAtInfinity(p)) {
-        ECP_Sm2PotSet(r, x2, y2, Sm2One);
-        return;
-    }
-    if (ECP_Sm2FpIsZero(q->x) && ECP_Sm2FpIsZero(q->y)) {
-        ECP_Sm2PotCopy(r, p);
-        return;
-    }
-
-    ECP_Sm2FpSqr(t1, z1);                     // t1 = A = z1^2
-    ECP_Sm2FpMul(t2, t1, z1);                 // t2 = B = z1 * A
-    ECP_Sm2FpMul(t1, t1, x2);                 // t1 = C = x2 * A
-    ECP_Sm2FpMul(t2, t2, y2);                 // t2 = D = y2 * B
-    ECP_Sm2FpSub(t1, t1, x1);                 // t1 = E = C - x1
-    ECP_Sm2FpSub(t2, t2, y1);                 // t2 = F = D - y1
-    if (ECP_Sm2FpEqu(t1, Sm2Zero)) {
-        if (ECP_Sm2FpEqu(t2, Sm2Zero)) {
-            Sm2Point t;
-            ECP_Sm2PotSet(&t, x2, y2, Sm2One);
-            ECP_Sm2PotDou(r, &t);
-        } else {
-            ECP_Sm2PotSetInfinity(r);
-        }
-        return;
-    }
-    ECP_Sm2FpMul(z3, z1, t1);                 // z3 = z1 * E
-    ECP_Sm2FpSqr(t3, t1);                     // t3 = G = E^2
-    ECP_Sm2FpMul(t4, t3, t1);                 // t4 = H = E^3
-    ECP_Sm2FpMul(t3, t3, x1);                 // t3 = I = x1 * G
-    ECP_Sm2FpDou(t1, t3);                     // t1 = 2I
-    ECP_Sm2FpSqr(x3, t2);                     // x3 = F^2
-    ECP_Sm2FpSub(x3, x3, t1);                 // x3 = F^2 - 2I
-    ECP_Sm2FpSub(x3, x3, t4);                 // x3 = F^2 - 2I - H
-    ECP_Sm2FpSub(t3, t3, x3);                 // t3 = I - x3
-    ECP_Sm2FpMul(t3, t3, t2);                 // t3 = (I - x3) * F
-    ECP_Sm2FpMul(t4, t4, y1);                 // t4 = y1 * H
-    ECP_Sm2FpSub(y3, t3, t4);                 // y3 = (I - x3) * F - y1 * H
-    ECP_Sm2PotSet(r, x3, y3, z3);
-}
-
-void ECP_Sm2PotDou(Sm2Point *r, const Sm2Point *a) {
-    if (ECP_Sm2PotAtInfinity(a)) {
-        ECP_Sm2PotCopy(r, a);
-        return;
-    }
-    // A = 3(x1 - z1^2) * (x1 + z1^2)
-    // B = 2Y1, z3 = B * z1, C = B^2
-    // D = C * x1, x3 = A^2 - 2D, (D - x3) * A - C^2/2
-    const uint32_t *x1 = a->x, *y1 = a->y, *z1 = a->z;
-    Sm2Fp t1, t2, t3, x3, y3, z3;
-    ECP_Sm2FpSqr(t1, z1);                     // t1 = z1^2
-    ECP_Sm2FpSub(t2, x1, t1);                 // t2 = x1 - z1^2
-    ECP_Sm2FpAdd(t1, x1, t1);                 // t1 = x1 + z1^2
-    ECP_Sm2FpMul(t2, t2, t1);                 // t2 = x1^2 - z1^4
-    ECP_Sm2FpDou(t3, t2);                     // t3 = 2(x1^2 - z1^4)
-    ECP_Sm2FpAdd(t2, t2, t3);                 // t2 = A = 3t2 = 3(x1^2 - z1^4)
-    ECP_Sm2FpDou(y3, y1);                     // y3 = B = 2y1
-    ECP_Sm2FpMul(z3, y3, z1);                 // z3 = B * z1
-    ECP_Sm2FpSqr(y3, y3);                     // y3 = C = B^2
-    ECP_Sm2FpMul(t3, y3, x1);                 // t3 = D = C * x1
-    ECP_Sm2FpSqr(y3, y3);                     // y3 = C^2
-    ECP_Sm2FpHaf(y3, y3);                     // y3 = C^2/2
-    ECP_Sm2FpSqr(x3, t2);                     // x3 = A^2
-    ECP_Sm2FpDou(t1, t3);                     // t1 = 2D
-    ECP_Sm2FpSub(x3, x3, t1);                 // x3 = A^2 - 2D
-    ECP_Sm2FpSub(t1, t3, x3);                 // t1 = D - x3
-    ECP_Sm2FpMul(t1, t1, t2);                 // t1 = (D - x3) * A
-    ECP_Sm2FpSub(y3, t1, y3);                 // y3 = (D - x3) * A - C^2/2
-    ECP_Sm2PotSet(r, x3, y3, z3);
-}
-
-void ECP_Sm2PotMultDouble(Sm2Point *r, uint32_t m, const Sm2Point *p) {
-    if (ECP_Sm2PotAtInfinity(p)) {
-        ECP_Sm2PotSet(r, p->x, p->y, p->z); return;
-    }
-
-    Sm2Fp x, y, z, w, a, b, t;
-    ECP_Sm2FpSet(x, p->x);
-    ECP_Sm2FpSet(y, p->y);
-    ECP_Sm2FpSet(z, p->z);
-    ECP_Sm2FpDou(y, y);                   // y = 2y
-    ECP_Sm2FpSqr(w, z);
-    ECP_Sm2FpSqr(w, w);                   // w = z^4
-    while(m--) {
-        ECP_Sm2FpSqr(a, x);
-        ECP_Sm2FpSub(a, a, w);
-        ECP_Sm2FpDou(t, a);
-        ECP_Sm2FpAdd(a, a, t);            // a = 3(x^2 - w)
-        ECP_Sm2FpSqr(b, y);
-        ECP_Sm2FpMul(b, x, b);            // b = x * y^2
-        ECP_Sm2FpSqr(x, a);
-        ECP_Sm2FpSub(x, x, b);
-        ECP_Sm2FpSub(x, x, b);            // x = a^2 - 2b
-        ECP_Sm2FpMul(z, z, y);            // z = z * y
-        ECP_Sm2FpSqr(t, y);
-        ECP_Sm2FpSqr(t, t);               // t = y^4
-        if (m)
-            ECP_Sm2FpMul(w, w, t);        // w = w * y^4
-        ECP_Sm2FpSub(y, b, x);
-        ECP_Sm2FpMul(y, y, a);
-        ECP_Sm2FpDou(y, y);
-        ECP_Sm2FpSub(y, y, t);            // y = 2(b-x) - y^4
-    }
-    ECP_Sm2FpHaf(y, y);
-    ECP_Sm2PotSet(r, x, y, z);
-}
-
-void ECP_Sm2PotMul(Sm2Point *r, const Sm2Fp k, const Sm2Point *g) {
-    static Sm2Naf K;
-    static Sm2Point upt[8];
-
-    // compute the sm2_naf of k
-    ECP_Sm2FpNaf(K, 4, k);
-
-    // compute the table of point g: {g, 3g, 5g, 7g, ...}
-    ECP_Sm2PotCopy(&upt[0], g);
-    ECP_Sm2PotDou(r, g);
-    for (uint32_t i = 1; i < 8; i++) {
-        ECP_Sm2PotAdd(&upt[i], &upt[i - 1], r);
-    }
-
-    // compute the result
-    uint32_t i = 0, j = 1;
-    ECP_Sm2PotSetInfinity(r);
-    do {
-        if (K[i] == 0) {
-            j++;
-        } else {
-            ECP_Sm2PotMultDouble(r, j, r);
-            if (K[i] > 0)
-                ECP_Sm2PotAdd(r, r, &upt[K[i] >> 1]);
-            else
-                ECP_Sm2PotSub(r, r, &upt[-K[i] >> 1]);
-            j = 1;
-        }
-    } while (++i <= 256);
-    ECP_Sm2PotMultDouble(r, j - 1, r);
-}
-
-static const Sm2Point pot_gentable[52] = {
+static const Sm2Point sm2_point_gen_table[52] = {
         {{0x334c74c7U, 0x715a4589U, 0xf2660be1U, 0x8fe30bbfU, 0x6a39c994U, 0x5f990446U, 0x1f198119U, 0x32c4ae2cU},
          {0x2139f0a0U, 0x02df32e5U, 0xc62a4740U, 0xd0a9877cU, 0x6b692153U, 0x59bdcee3U, 0xf4f6779cU, 0xbc3736a2U},{1}},
         {{0x6024666cU, 0xa32641e5U, 0x03e5565cU, 0x791734cdU, 0x817f2329U, 0xa6d5c2b5U, 0x0950d180U, 0x25d3debdU},
@@ -915,13 +137,383 @@ static const Sm2Point pot_gentable[52] = {
          {0x0746e1aaU, 0x63d0aca2U, 0xbc547380U, 0x083d8d22U, 0xe5fd9181U, 0xf0ab2ad4U, 0xe629a820U, 0x571adb13U},{1}},
         };
 
-void ECP_Sm2PotGen(Sm2Point *r, const Sm2Fp k) {
+void ECP_Sm2FpSet(Sm2Fp r, const Sm2Fp a) {
+    memcpy_s(r, sizeof(Sm2Fp), a, sizeof(Sm2Fp));
+}
+
+static int ECP_Sm2FpIsOdd(const Sm2Fp a){
+    return (int) a[0] & 1;
+}
+
+static int ECP_Sm2FpIsZero(const Sm2Fp a) {
+    return a[0] == 0 && a[1] == 0 && a[2] == 0 && a[3] == 0 && a[4] == 0 && a[5] == 0 && a[6] == 0 && a[7] == 0;
+}
+
+static int ECP_Sm2FpEqu(const Sm2Fp a, const Sm2Fp b) {
+    return a[0] == b[0] && a[1] == b[1] && a[2] == b[2] && a[3] == b[3] && a[4] == b[4] && a[5] == b[5] && a[6] == b[6] && a[7] == b[7];
+}
+
+static void ECP_Sm2FpNaf(Sm2Naf r, const uint8_t w, const Sm2Fp n) {
+    if (w > 7)
+        return;     // w > 7 is not supported unless the sm2_naf type definition is expanded from int8_t[257] to int[257]
+
+    int i = 256;
+    Sm2Fp k, t;
+    ECP_Sm2FpSet(k, n);
+    while (ECP_Sm2FpCmp(k, Sm2One)) {
+        if (ECP_Sm2FpIsOdd(k)) {
+            ECP_Sm2FpSet(t, Sm2Zero);
+            t[0] = k[0] & ((1 << w) - 1);
+            if (t[0] >> (w - 1)) {
+                t[0] = (1 << w) - t[0];
+                r[i] = (int8_t) -t[0];
+            } else {
+                r[i] = (int8_t) t[0];
+            }
+            if (r[i] > 0)
+                ECP_Sm2FpSub(k, k, t);
+            else
+                ECP_Sm2FpAdd(k, k, t);
+        } else
+            r[i] = 0;
+        ECP_Sm2FpHaf(k, k);
+        i--;
+    }
+    while (i >= 0) {
+        r[i--] = 0;
+    }
+}
+
+static void ECP_Sm2FpNafP(int8_t K[52], const Sm2Fp k) {
+    Sm2Naf kn;
+    ECP_Sm2FpNaf(kn, 2, k);
+    int i, j = 0;
+    for (i = 256; i > 2; i = i-5){
+        K[j++] = (int8_t) (kn[i] + (kn[i-1]<<1) + (kn[i-2]<<2) + (kn[i-3]<<3) + (kn[i-4]<<4));
+    }
+    K[j] = (int8_t) (kn[1] + (kn[0]<<1));
+}
+
+//**********************************************************************************************************************
+
+void ECP_Sm2PointToAffineCore(const Sm2Point *a, Sm2Point *r) {
+    Sm2Fp t1, t2;
+    ECP_Sm2FpInv(t1, a->z);
+    ECP_Sm2FpSqr(t2, t1);
+    ECP_Sm2FpMul(r->x, t2, a->x);
+    ECP_Sm2FpMul(t2, t2, t1);
+    ECP_Sm2FpMul(r->y, t2, a->y);
+    ECP_Sm2FpSet(r->z, Sm2One);
+}
+
+static void ECP_Sm2PointCopy(Sm2Point *p, const Sm2Point *q) {
+    memcpy_s(p, sizeof(Sm2Point), q, sizeof(Sm2Point));
+}
+
+static void ECP_Sm2PointSet(Sm2Point *p, const Sm2Fp x, const Sm2Fp y, const Sm2Fp z) {
+    ECP_Sm2FpSet(p->x, x);
+    ECP_Sm2FpSet(p->y, y);
+    ECP_Sm2FpSet(p->z, z);
+}
+
+static void ECP_Sm2PointSetInfinity(Sm2Point *r) {
+    ECP_Sm2PointSet(r, Sm2One, Sm2One, Sm2Zero);
+}
+
+static int ECP_Sm2PointAtInfinity(const Sm2Point *r){
+    return ECP_Sm2FpIsZero(r->z);
+}
+
+void ECP_Sm2PointAddCore(Sm2Point *r, const Sm2Point *p, const Sm2Point *q) {
+    // Check if one of the points is the point at infinity
+    if (ECP_Sm2PointAtInfinity(p)) {
+        ECP_Sm2PointCopy(r, q);
+        return;
+    }
+    if (ECP_Sm2PointAtInfinity(q)) {
+        ECP_Sm2PointCopy(r, p);
+        return;
+    }
+
+    const uint32_t *x1 = p->x, *y1 = p->y, *z1 = p->z;
+    const uint32_t *x2 = q->x, *y2 = q->y, *z2 = q->z;
+    Sm2Fp x3, y3, z3, u1, u2, s1, s2, h, n, h2, h3, u1h2, t1, t2;
+
+    ECP_Sm2FpSqr(t1, z1);                     // t1 = z1^2
+    ECP_Sm2FpSqr(t2, z2);                     // t2 = z2^2
+    ECP_Sm2FpMul(u1, x1, t2);                 // u1 = x1 * z2^2
+    ECP_Sm2FpMul(u2, x2, t1);                 // u2 = x2 * z1^2
+    ECP_Sm2FpMul(t1, t1, z1);                 // t1 = z1^3
+    ECP_Sm2FpMul(t2, t2, z2);                 // t2 = z2^3
+    ECP_Sm2FpMul(s1, y1, t2);                 // s1 = y1 * z2^3
+    ECP_Sm2FpMul(s2, y2, t1);                 // s2 = y2 * z1^3
+    if (ECP_Sm2FpEqu(u1, u2)) {
+        if (ECP_Sm2FpEqu(s1, s2))
+            ECP_Sm2PointDouCore(r, p);
+        else
+            ECP_Sm2PointSetInfinity(r);
+        return;
+    }
+    ECP_Sm2FpSub(h, u2, u1);                  // h = u2 - u1
+    ECP_Sm2FpSub(n, s2, s1);                  // n = s2 - s1
+    ECP_Sm2FpSqr(h2, h);                      // h2 = h^2
+    ECP_Sm2FpMul(h3, h2, h);                  // h3 = h^3
+    ECP_Sm2FpMul(u1h2, u1, h2);               // u1h2 = u1 * h^2
+    ECP_Sm2FpDou(t1, u1h2);                   // t1 = 2u1h2
+    ECP_Sm2FpSqr(x3, n);                      // x3 = n^2
+    ECP_Sm2FpSub(x3, x3, h3);                 // x3 = n^2 - h3
+    ECP_Sm2FpSub(x3, x3, t1);                 // x3 = n^2 - h3 - 2u1h2
+    ECP_Sm2FpMul(t1, s1, h3);                 // t1 = s1 * h3
+    ECP_Sm2FpSub(y3, u1h2, x3);               // y3 = u1h2 - x3
+    ECP_Sm2FpMul(y3, y3, n);                  // y3 = n * (u1h2 - x3)
+    ECP_Sm2FpSub(y3, y3, t1);                 // y3 = n * (u1h2 - x3) - s1 * h3
+    ECP_Sm2FpMul(z3, z1, z2);                 // z3 = z1 * z2
+    ECP_Sm2FpMul(z3, z3, h);                  // z3 = h * z1 * z2
+    ECP_Sm2PointSet(r, x3, y3, z3);
+}
+
+void ECP_Sm2PointSubCore(Sm2Point *r, const Sm2Point *p, const Sm2Point *q) {
+    // Check if one of the points is the point at infinity
+    if (ECP_Sm2PointAtInfinity(p)) {
+        ECP_Sm2PointCopy(r, q);
+        return;
+    }
+    if (ECP_Sm2PointAtInfinity(q)) {
+        ECP_Sm2PointCopy(r, p);
+        return;
+    }
+
+    const uint32_t *x1 = p->x, *y1 = p->y, *z1 = p->z, *x2 = q->x, *z2 = q->z;
+    Sm2Fp y2, x3, y3, z3, u1, u2, s1, s2, h, n, h2, h3, u1h2, t1, t2;
+    ECP_Sm2FpNeg(y2, q->y);
+    ECP_Sm2FpSqr(t1, z1);                     // t1 = z1^2
+    ECP_Sm2FpSqr(t2, z2);                     // t2 = z2^2
+    ECP_Sm2FpMul(u1, x1, t2);                 // u1 = x1 * z2^2
+    ECP_Sm2FpMul(u2, x2, t1);                 // u2 = x2 * z1^2
+    ECP_Sm2FpMul(t1, t1, z1);                 // t1 = z1^3
+    ECP_Sm2FpMul(t2, t2, z2);                 // t2 = z2^3
+    ECP_Sm2FpMul(s1, y1, t2);                 // s1 = y1 * z2^3
+    ECP_Sm2FpMul(s2, y2, t1);                 // s2 = y2 * z1^3
+    if (ECP_Sm2FpEqu(u1, u2)) {
+        if (ECP_Sm2FpEqu(s1, s2))
+            ECP_Sm2PointDouCore(r, p);
+        else
+            ECP_Sm2PointSetInfinity(r);
+        return;
+    }
+    ECP_Sm2FpSub(h, u2, u1);                  // h = u2 - u1
+    ECP_Sm2FpSub(n, s2, s1);                  // n = s2 - s1
+    ECP_Sm2FpSqr(h2, h);                      // h2 = h^2
+    ECP_Sm2FpMul(h3, h2, h);                  // h3 = h^3
+    ECP_Sm2FpMul(u1h2, u1, h2);               // u1h2 = u1 * h^2
+    ECP_Sm2FpDou(t1, u1h2);                   // t1 = 2u1h2
+    ECP_Sm2FpSqr(x3, n);                      // x3 = n^2
+    ECP_Sm2FpSub(x3, x3, h3);                 // x3 = n^2 - h3
+    ECP_Sm2FpSub(x3, x3, t1);                 // x3 = n^2 - h3 - 2u1h2
+    ECP_Sm2FpMul(t1, s1, h3);                 // t1 = s1 * h3
+    ECP_Sm2FpSub(y3, u1h2, x3);               // y3 = u1h2 - x3
+    ECP_Sm2FpMul(y3, y3, n);                  // y3 = n * (u1h2 - x3)
+    ECP_Sm2FpSub(y3, y3, t1);                 // y3 = n * (u1h2 - x3) - s1 * h3
+    ECP_Sm2FpMul(z3, z1, z2);                 // z3 = z1 * z2
+    ECP_Sm2FpMul(z3, z3, h);                  // z3 = h * z1 * z2
+    ECP_Sm2PointSet(r, x3, y3, z3);
+}
+
+void ECP_Sm2PointAddWithAffineCore(Sm2Point *r, const Sm2Point *p, const Sm2Point *q) {
+    if (ECP_Sm2PointAtInfinity(p)) {
+        ECP_Sm2PointCopy(r, q);
+        return;
+    }
+    if (ECP_Sm2FpIsZero(q->x) && ECP_Sm2FpIsZero(q->y)) {
+        ECP_Sm2PointCopy(r, p);
+        return;
+    }
+
+    const uint32_t *x1 = p->x, *y1 = p->y, *z1 = p->z, *x2 = q->x, *y2 = q->y;
+    Sm2Fp x3, y3, z3, t1, t2, t3, t4;
+
+    ECP_Sm2FpSqr(t1, z1);                     // t1 = A = z1^2
+    ECP_Sm2FpMul(t2, t1, z1);                 // t2 = B = z1 * A
+    ECP_Sm2FpMul(t1, t1, x2);                 // t1 = C = x2 * A
+    ECP_Sm2FpMul(t2, t2, y2);                 // t2 = D = y2 * B
+    ECP_Sm2FpSub(t1, t1, x1);                 // t1 = E = C - x1
+    ECP_Sm2FpSub(t2, t2, y1);                 // t2 = F = D - y1
+    if (ECP_Sm2FpEqu(t1, Sm2Zero)) {
+        if (ECP_Sm2FpEqu(t2, Sm2Zero)) {
+            Sm2Point t;
+            ECP_Sm2PointSet(&t, x2, y2, Sm2One);
+            ECP_Sm2PointDouCore(r, &t);
+        } else {
+            ECP_Sm2PointSetInfinity(r);
+        }
+        return;
+    }
+    ECP_Sm2FpMul(z3, z1, t1);                 // z3 = z1 * E
+    ECP_Sm2FpSqr(t3, t1);                     // t3 = G = E^2
+    ECP_Sm2FpMul(t4, t3, t1);                 // t4 = H = E^3
+    ECP_Sm2FpMul(t3, t3, x1);                 // t3 = I = x1 * G
+    ECP_Sm2FpDou(t1, t3);                     // t1 = 2I
+    ECP_Sm2FpSqr(x3, t2);                     // x3 = F^2
+    ECP_Sm2FpSub(x3, x3, t1);                 // x3 = F^2 - 2I
+    ECP_Sm2FpSub(x3, x3, t4);                 // x3 = F^2 - 2I - H
+    ECP_Sm2FpSub(t3, t3, x3);                 // t3 = I - x3
+    ECP_Sm2FpMul(t3, t3, t2);                 // t3 = (I - x3) * F
+    ECP_Sm2FpMul(t4, t4, y1);                 // t4 = y1 * H
+    ECP_Sm2FpSub(y3, t3, t4);                 // y3 = (I - x3) * F - y1 * H
+    ECP_Sm2PointSet(r, x3, y3, z3);
+}
+
+void ECP_Sm2PointSubWithAffineCore(Sm2Point *r, const Sm2Point *p, const Sm2Point *q) {
+    const uint32_t *x1 = p->x, *y1 = p->y, *z1 = p->z, *x2 = q->x;
+    Sm2Fp y2, x3, y3, z3, t1, t2, t3, t4;
+    ECP_Sm2FpNeg(y2, q->y);
+
+    if (ECP_Sm2PointAtInfinity(p)) {
+        ECP_Sm2PointSet(r, x2, y2, Sm2One);
+        return;
+    }
+    if (ECP_Sm2FpIsZero(q->x) && ECP_Sm2FpIsZero(q->y)) {
+        ECP_Sm2PointCopy(r, p);
+        return;
+    }
+
+    ECP_Sm2FpSqr(t1, z1);                     // t1 = A = z1^2
+    ECP_Sm2FpMul(t2, t1, z1);                 // t2 = B = z1 * A
+    ECP_Sm2FpMul(t1, t1, x2);                 // t1 = C = x2 * A
+    ECP_Sm2FpMul(t2, t2, y2);                 // t2 = D = y2 * B
+    ECP_Sm2FpSub(t1, t1, x1);                 // t1 = E = C - x1
+    ECP_Sm2FpSub(t2, t2, y1);                 // t2 = F = D - y1
+    if (ECP_Sm2FpEqu(t1, Sm2Zero)) {
+        if (ECP_Sm2FpEqu(t2, Sm2Zero)) {
+            Sm2Point t;
+            ECP_Sm2PointSet(&t, x2, y2, Sm2One);
+            ECP_Sm2PointDouCore(r, &t);
+        } else {
+            ECP_Sm2PointSetInfinity(r);
+        }
+        return;
+    }
+    ECP_Sm2FpMul(z3, z1, t1);                 // z3 = z1 * E
+    ECP_Sm2FpSqr(t3, t1);                     // t3 = G = E^2
+    ECP_Sm2FpMul(t4, t3, t1);                 // t4 = H = E^3
+    ECP_Sm2FpMul(t3, t3, x1);                 // t3 = I = x1 * G
+    ECP_Sm2FpDou(t1, t3);                     // t1 = 2I
+    ECP_Sm2FpSqr(x3, t2);                     // x3 = F^2
+    ECP_Sm2FpSub(x3, x3, t1);                 // x3 = F^2 - 2I
+    ECP_Sm2FpSub(x3, x3, t4);                 // x3 = F^2 - 2I - H
+    ECP_Sm2FpSub(t3, t3, x3);                 // t3 = I - x3
+    ECP_Sm2FpMul(t3, t3, t2);                 // t3 = (I - x3) * F
+    ECP_Sm2FpMul(t4, t4, y1);                 // t4 = y1 * H
+    ECP_Sm2FpSub(y3, t3, t4);                 // y3 = (I - x3) * F - y1 * H
+    ECP_Sm2PointSet(r, x3, y3, z3);
+}
+
+void ECP_Sm2PointDouCore(Sm2Point *r, const Sm2Point *a) {
+    if (ECP_Sm2PointAtInfinity(a)) {
+        ECP_Sm2PointCopy(r, a);
+        return;
+    }
+    // A = 3(x1 - z1^2) * (x1 + z1^2)
+    // B = 2Y1, z3 = B * z1, C = B^2
+    // D = C * x1, x3 = A^2 - 2D, (D - x3) * A - C^2/2
+    const uint32_t *x1 = a->x, *y1 = a->y, *z1 = a->z;
+    Sm2Fp t1, t2, t3, x3, y3, z3;
+    ECP_Sm2FpSqr(t1, z1);                     // t1 = z1^2
+    ECP_Sm2FpSub(t2, x1, t1);                 // t2 = x1 - z1^2
+    ECP_Sm2FpAdd(t1, x1, t1);                 // t1 = x1 + z1^2
+    ECP_Sm2FpMul(t2, t2, t1);                 // t2 = x1^2 - z1^4
+    ECP_Sm2FpDou(t3, t2);                     // t3 = 2(x1^2 - z1^4)
+    ECP_Sm2FpAdd(t2, t2, t3);                 // t2 = A = 3t2 = 3(x1^2 - z1^4)
+    ECP_Sm2FpDou(y3, y1);                     // y3 = B = 2y1
+    ECP_Sm2FpMul(z3, y3, z1);                 // z3 = B * z1
+    ECP_Sm2FpSqr(y3, y3);                     // y3 = C = B^2
+    ECP_Sm2FpMul(t3, y3, x1);                 // t3 = D = C * x1
+    ECP_Sm2FpSqr(y3, y3);                     // y3 = C^2
+    ECP_Sm2FpHaf(y3, y3);                     // y3 = C^2/2
+    ECP_Sm2FpSqr(x3, t2);                     // x3 = A^2
+    ECP_Sm2FpDou(t1, t3);                     // t1 = 2D
+    ECP_Sm2FpSub(x3, x3, t1);                 // x3 = A^2 - 2D
+    ECP_Sm2FpSub(t1, t3, x3);                 // t1 = D - x3
+    ECP_Sm2FpMul(t1, t1, t2);                 // t1 = (D - x3) * A
+    ECP_Sm2FpSub(y3, t1, y3);                 // y3 = (D - x3) * A - C^2/2
+    ECP_Sm2PointSet(r, x3, y3, z3);
+}
+
+void ECP_Sm2PointMultDoubleCore(Sm2Point *r, uint32_t m, const Sm2Point *p) {
+    if (ECP_Sm2PointAtInfinity(p)) {
+        ECP_Sm2PointSet(r, p->x, p->y, p->z); return;
+    }
+
+    Sm2Fp x, y, z, w, a, b, t;
+    ECP_Sm2FpSet(x, p->x);
+    ECP_Sm2FpSet(y, p->y);
+    ECP_Sm2FpSet(z, p->z);
+    ECP_Sm2FpDou(y, y);                   // y = 2y
+    ECP_Sm2FpSqr(w, z);
+    ECP_Sm2FpSqr(w, w);                   // w = z^4
+    while(m--) {
+        ECP_Sm2FpSqr(a, x);
+        ECP_Sm2FpSub(a, a, w);
+        ECP_Sm2FpDou(t, a);
+        ECP_Sm2FpAdd(a, a, t);            // a = 3(x^2 - w)
+        ECP_Sm2FpSqr(b, y);
+        ECP_Sm2FpMul(b, x, b);            // b = x * y^2
+        ECP_Sm2FpSqr(x, a);
+        ECP_Sm2FpSub(x, x, b);
+        ECP_Sm2FpSub(x, x, b);            // x = a^2 - 2b
+        ECP_Sm2FpMul(z, z, y);            // z = z * y
+        ECP_Sm2FpSqr(t, y);
+        ECP_Sm2FpSqr(t, t);               // t = y^4
+        if (m)
+            ECP_Sm2FpMul(w, w, t);        // w = w * y^4
+        ECP_Sm2FpSub(y, b, x);
+        ECP_Sm2FpMul(y, y, a);
+        ECP_Sm2FpDou(y, y);
+        ECP_Sm2FpSub(y, y, t);            // y = 2(b-x) - y^4
+    }
+    ECP_Sm2FpHaf(y, y);
+    ECP_Sm2PointSet(r, x, y, z);
+}
+
+void ECP_Sm2PointMulCore(Sm2Point *r, const Sm2Fp k, const Sm2Point *g) {
+    static Sm2Naf K;
+    static Sm2Point upt[8];
+
+    // compute the sm2_naf of k
+    ECP_Sm2FpNaf(K, 4, k);
+
+    // compute the table of point g: {g, 3g, 5g, 7g, ...}
+    ECP_Sm2PointCopy(&upt[0], g);
+    ECP_Sm2PointDouCore(r, g);
+    for (uint32_t i = 1; i < 8; i++) {
+        ECP_Sm2PointAddCore(&upt[i], &upt[i - 1], r);
+    }
+
+    // compute the result
+    uint32_t i = 0, j = 1;
+    ECP_Sm2PointSetInfinity(r);
+    do {
+        if (K[i] == 0) {
+            j++;
+        } else {
+            ECP_Sm2PointMultDoubleCore(r, j, r);
+            if (K[i] > 0)
+                ECP_Sm2PointAddCore(r, r, &upt[K[i] >> 1]);
+            else
+                ECP_Sm2PointSubCore(r, r, &upt[-K[i] >> 1]);
+            j = 1;
+        }
+    } while (++i <= 256);
+    ECP_Sm2PointMultDoubleCore(r, j - 1, r);
+}
+
+void ECP_Sm2PointGenCore(Sm2Point *r, const Sm2Fp k) {
     static Sm2Point a, b;
     static int8_t K[52];
 
     // set infinity point(1, 1, 0)
-    ECP_Sm2PotSetInfinity(&a);
-    ECP_Sm2PotSetInfinity(&b);
+    ECP_Sm2PointSetInfinity(&a);
+    ECP_Sm2PointSetInfinity(&b);
 
     // compute the sm2_naf of k
     ECP_Sm2FpNafP(K, k);
@@ -930,13 +522,13 @@ void ECP_Sm2PotGen(Sm2Point *r, const Sm2Fp k) {
     for (int j = 21; j > 0; j--) {
         for (int i = 0; i < 52; i++) {
             if (K[i] == j)
-                ECP_Sm2PotAddWithAffine(&b, &b, &pot_gentable[i]);
+                ECP_Sm2PointAddWithAffineCore(&b, &b, &sm2_point_gen_table[i]);
             if (K[i] == -j)
-                ECP_Sm2PotSubWithAffine(&b, &b, &pot_gentable[i]);
+                ECP_Sm2PointSubWithAffineCore(&b, &b, &sm2_point_gen_table[i]);
         }
-        ECP_Sm2PotAdd(&a, &a, &b);
+        ECP_Sm2PointAddCore(&a, &a, &b);
     }
-    ECP_Sm2PotCopy(r, &a);
+    ECP_Sm2PointCopy(r, &a);
 }
 
 static int32_t ECP_SM2FpGet(Sm2Fp dst, const BN_BigNum *src)
@@ -957,8 +549,7 @@ static int32_t ECP_SM2FpGet(Sm2Fp dst, const BN_BigNum *src)
 
 static int32_t ECP_SM2FpPut(const Sm2Fp src, BN_BigNum *dst)
 {
-    int32_t ret;
-    ret = BN_Extend(dst, 8);
+    int32_t ret = BN_Extend(dst, 8);
     if (ret != CRYPT_SUCCESS) {
         return ret;
     }
@@ -971,7 +562,7 @@ static int32_t ECP_SM2FpPut(const Sm2Fp src, BN_BigNum *dst)
 
 }
 
-static int32_t ECP_SM2pointGet(Sm2Point *dst, const ECC_Point *src)
+static int32_t ECP_SM2PointGet(Sm2Point *dst, const ECC_Point *src)
 {
     int32_t ret;
     GOTO_ERR_IF_EX(ECP_SM2FpGet(dst->x, src->x), ret);
@@ -981,7 +572,7 @@ ERR:
     return ret;
 }
 
-static int32_t ECP_SM2pointPut(const Sm2Point *src, ECC_Point *dst)
+static int32_t ECP_SM2PointPut(const Sm2Point *src, ECC_Point *dst)
 {
     int32_t ret;
     GOTO_ERR_IF_EX(ECP_SM2FpPut(src->x, dst->x), ret);
@@ -993,7 +584,7 @@ ERR:
 
 int32_t ECP_Sm2Mul(BN_BigNum *r, const BN_BigNum *a, const BN_BigNum *b, void *data, BN_Optimizer *opt)
 {
-    BN_BigNum *mod = (BN_BigNum *)data;
+    BN_BigNum *mod = data;
     if (r == NULL || a == NULL || b == NULL || mod == NULL || opt == NULL) {
         BSL_ERR_PUSH_ERROR(CRYPT_NULL_INPUT);
         return CRYPT_NULL_INPUT;
@@ -1099,13 +690,13 @@ int32_t ECP_Sm2Point2Affine(const ECC_Para *para, ECC_Point *r, const ECC_Point 
     int32_t ret = CRYPT_SUCCESS;
     Sm2Point p;
     Sm2Fp t1, t2;
-    GOTO_ERR_IF_EX(ECP_SM2pointGet(&p, a), ret);
+    GOTO_ERR_IF_EX(ECP_SM2PointGet(&p, a), ret);
     ECP_Sm2FpInv(t1, p.z);
     ECP_Sm2FpSqr(t2, t1);
     ECP_Sm2FpMul(p.x, t2, p.x);
     ECP_Sm2FpMul(t2, t2, t1);
     ECP_Sm2FpMul(p.y, t2, p.y);
-    GOTO_ERR_IF_EX(ECP_SM2pointPut(&p, r), ret);
+    GOTO_ERR_IF_EX(ECP_SM2PointPut(&p, r), ret);
 
 ERR:
     return ret;
@@ -1131,13 +722,13 @@ int32_t ECP_Sm2Point2AffineWithInv(const ECC_Para *para, ECC_Point *r, const ECC
     Sm2Fp n;
     Sm2Point p, q;
     GOTO_ERR_IF(ECP_SM2FpGet(n, inv), ret);
-    GOTO_ERR_IF(ECP_SM2pointGet(&q, a), ret);
+    GOTO_ERR_IF(ECP_SM2PointGet(&q, a), ret);
     ECP_Sm2FpSqr(p.z, n);
     ECP_Sm2FnMul(p.x, p.z, q.x);
     ECP_Sm2FnMul(p.y, p.z, q.y);
     ECP_Sm2FnMul(p.y, p.y, n);
     ECP_Sm2FpSet(p.z, Sm2One);
-    GOTO_ERR_IF(ECP_SM2pointPut(&p, r), ret);
+    GOTO_ERR_IF(ECP_SM2PointPut(&p, r), ret);
 ERR:
     return ret;
 }
@@ -1161,11 +752,11 @@ int32_t ECP_Sm2PointAdd(const ECC_Para *para, ECC_Point *r, const ECC_Point *a, 
     }
     int32_t ret = CRYPT_SUCCESS;
     Sm2Point p, q;
-    GOTO_ERR_IF(ECP_SM2pointGet(&p, a), ret);
-    GOTO_ERR_IF(ECP_SM2pointGet(&q, b), ret);
-    ECP_Sm2PotAdd(&p, &p, &q);
-    ECP_Sm2PotToAffine(&p, &p);
-    GOTO_ERR_IF(ECP_SM2pointPut(&p, r), ret);
+    GOTO_ERR_IF(ECP_SM2PointGet(&p, a), ret);
+    GOTO_ERR_IF(ECP_SM2PointGet(&q, b), ret);
+    ECP_Sm2PointAddCore(&p, &p, &q);
+    ECP_Sm2PointToAffineCore(&p, &p);
+    GOTO_ERR_IF(ECP_SM2PointPut(&p, r), ret);
 
 ERR:
     return ret;
@@ -1182,11 +773,11 @@ int32_t ECP_Sm2PointAddAffine(const ECC_Para *para, ECC_Point *r, const ECC_Poin
     }
     int32_t ret = CRYPT_SUCCESS;
     Sm2Point p, q;
-    GOTO_ERR_IF(ECP_SM2pointGet(&p, a), ret);
-    GOTO_ERR_IF(ECP_SM2pointGet(&q, b), ret);
-    ECP_Sm2PotAddWithAffine(&p, &p, &q);
-    ECP_Sm2PotToAffine(&p, &p);
-    GOTO_ERR_IF(ECP_SM2pointPut(&p, r), ret);
+    GOTO_ERR_IF(ECP_SM2PointGet(&p, a), ret);
+    GOTO_ERR_IF(ECP_SM2PointGet(&q, b), ret);
+    ECP_Sm2PointAddWithAffineCore(&p, &p, &q);
+    ECP_Sm2PointToAffineCore(&p, &p);
+    GOTO_ERR_IF(ECP_SM2PointPut(&p, r), ret);
     ERR:
         return ret;
 }
@@ -1199,10 +790,10 @@ int32_t ECP_Sm2PointDouble(const ECC_Para *para, ECC_Point *r, const ECC_Point *
     }
     int32_t ret = CRYPT_SUCCESS;
     Sm2Point p;
-    GOTO_ERR_IF(ECP_SM2pointGet(&p, a), ret);
-    ECP_Sm2PotDou(&p, &p);
-    ECP_Sm2PotToAffine(&p, &p);
-    GOTO_ERR_IF(ECP_SM2pointPut(&p, r), ret);
+    GOTO_ERR_IF(ECP_SM2PointGet(&p, a), ret);
+    ECP_Sm2PointDouCore(&p, &p);
+    ECP_Sm2PointToAffineCore(&p, &p);
+    GOTO_ERR_IF(ECP_SM2PointPut(&p, r), ret);
 ERR:
     return ret;
 }
@@ -1215,10 +806,10 @@ int32_t ECP_Sm2PointMultDouble(const ECC_Para *para, ECC_Point *r, const ECC_Poi
     }
     int32_t ret = CRYPT_SUCCESS;
     Sm2Point p;
-    GOTO_ERR_IF(ECP_SM2pointGet(&p, a), ret);
-    ECP_Sm2PotMultDouble(&p, m, &p);
-    ECP_Sm2PotToAffine(&p, &p);
-    GOTO_ERR_IF(ECP_SM2pointPut(&p, r), ret);
+    GOTO_ERR_IF(ECP_SM2PointGet(&p, a), ret);
+    ECP_Sm2PointMultDoubleCore(&p, m, &p);
+    ECP_Sm2PointToAffineCore(&p, &p);
+    GOTO_ERR_IF(ECP_SM2PointPut(&p, r), ret);
 ERR:
     return ret;
 }
@@ -1246,13 +837,13 @@ int32_t ECP_Sm2PointMul(ECC_Para *para, ECC_Point *r, const BN_BigNum *scalar, c
     Sm2Point p;
     GOTO_ERR_IF(ECP_SM2FpGet(k, scalar), ret);
     if (pt == NULL) {
-        ECP_Sm2PotGen(&p, k);
+        ECP_Sm2PointGenCore(&p, k);
     } else {
-        GOTO_ERR_IF_EX(ECP_SM2pointGet(&p, pt), ret);
-        ECP_Sm2PotMul(&p, k, &p);
+        GOTO_ERR_IF_EX(ECP_SM2PointGet(&p, pt), ret);
+        ECP_Sm2PointMulCore(&p, k, &p);
     }
-    ECP_Sm2PotToAffine(&p, &p);
-    GOTO_ERR_IF_EX(ECP_SM2pointPut(&p, r), ret);
+    ECP_Sm2PointToAffineCore(&p, &p);
+    GOTO_ERR_IF_EX(ECP_SM2PointPut(&p, r), ret);
 
 ERR:
     return ret;
@@ -1287,12 +878,12 @@ int32_t ECP_Sm2PointMulAdd(ECC_Para *para, ECC_Point *r, const BN_BigNum *k1, co
     Sm2Point p, q;
     GOTO_ERR_IF(ECP_SM2FpGet(s, k1), ret);
     GOTO_ERR_IF(ECP_SM2FpGet(t, k2), ret);
-    GOTO_ERR_IF(ECP_SM2pointGet(&q, pt), ret);
-    ECP_Sm2PotGen(&p, s);
-    ECP_Sm2PotMul(&q, t, &q);
-    ECP_Sm2PotAdd(&p, &p, &q);
-    ECP_Sm2PotToAffine(&p, &p);
-    GOTO_ERR_IF(ECP_SM2pointPut(&p, r), ret);
+    GOTO_ERR_IF(ECP_SM2PointGet(&q, pt), ret);
+    ECP_Sm2PointGenCore(&p, s);
+    ECP_Sm2PointMulCore(&q, t, &q);
+    ECP_Sm2PointAddCore(&p, &p, &q);
+    ECP_Sm2PointToAffineCore(&p, &p);
+    GOTO_ERR_IF(ECP_SM2PointPut(&p, r), ret);
 
 ERR:
     return ret;
